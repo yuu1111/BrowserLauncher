@@ -22,11 +22,7 @@ jobs:
         run: zig build -Doptimize=ReleaseSafe
 
       - name: Create Zip
-        run: |
-          mkdir release
-          copy zig-out\bin\BrowserLauncher.exe release\
-          copy config.json release\
-          Compress-Archive -Path release\* -DestinationPath BrowserLauncher.zip
+        run: Compress-Archive -Path zig-out\bin\BrowserLauncher.exe -DestinationPath BrowserLauncher.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

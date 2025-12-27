@@ -26,6 +26,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    exe.subsystem = .windows;
 
     // zig-out/bin にインストール
     b.installArtifact(exe);
