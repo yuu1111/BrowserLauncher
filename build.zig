@@ -1,6 +1,17 @@
+//! BrowserLauncher ビルド設定
+//!
+//! 使用方法:
+//! - `zig build` - ビルドして zig-out/bin に出力
+//! - `zig build run` - ビルドして実行
+//! - `zig build run -- https://example.com` - 引数付きで実行
+//! - `zig build test` - テストを実行
+
 const std = @import("std");
 
-/// ビルド設定
+/// ビルドグラフを構築する
+///
+/// Zigビルドシステムはこの関数を呼び出してビルドステップを定義する。
+/// 実際のビルドは外部ランナーが実行する。
 pub fn build(b: *std.Build) void {
     // ターゲットと最適化オプション
     const target = b.standardTargetOptions(.{});
