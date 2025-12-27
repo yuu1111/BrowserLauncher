@@ -110,7 +110,10 @@ const ConfigResult = struct {
 };
 
 /// exe横のconfig.jsonを読み込む
-fn loadConfig(allocator: std.mem.Allocator) !?ConfigResult {
+fn loadConfig(
+    /// メモリアロケータ
+    allocator: std.mem.Allocator,
+) !?ConfigResult {
     // exe横のconfig.jsonを探す
     const exe_dir = try fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(exe_dir);
@@ -147,7 +150,12 @@ fn loadConfig(allocator: std.mem.Allocator) !?ConfigResult {
 /// 1. -b/--browser で指定(パスならそのまま、名前ならconfig.jsonから解決)
 /// 2. config.json の default
 /// 3. null(OSデフォルトを使用)
-fn determineBrowserPath(browser_arg: ?[]const u8, config: ?ConfigResult) ?[]const u8 {
+fn determineBrowserPath(
+    /// ブラウザ名またはパス(コマンドライン引数から)
+    browser_arg: ?[]const u8,
+    /// 設定ファイルの読み込み結果
+    config: ?ConfigResult,
+) ?[]const u8 {
     if (browser_arg) |arg| {
         // パス区切りまたは.exeが含まれていればパスとして扱う
         if (std.mem.indexOf(u8, arg, "\\") != null or
@@ -183,7 +191,14 @@ fn determineBrowserPath(browser_arg: ?[]const u8, config: ?ConfigResult) ?[]cons
 }
 
 /// 指定されたブラウザでURLを開く
-fn launchBrowser(allocator: std.mem.Allocator, browser_path: []const u8, url: ?[]const u8) !void {
+fn launchBrowser(
+    /// メモリアロケータ
+    allocator: std.mem.Allocator,
+    /// ブラウザ実行ファイルのパス
+    browser_path: []const u8,
+    /// 開くURL(nullの場合はブラウザのみ起動)
+    url: ?[]const u8,
+) !void {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
 
@@ -199,7 +214,12 @@ fn launchBrowser(allocator: std.mem.Allocator, browser_path: []const u8, url: ?[
 /// OSのデフォルトブラウザでURLを開く
 ///
 /// Windowsでは `cmd /c start "" URL` を使用する。
-fn launchWithSystemDefault(allocator: std.mem.Allocator, url: ?[]const u8) !void {
+fn launchWithSystemDefault(
+    /// メモリアロケータ
+    allocator: std.mem.Allocator,
+    /// 開くURL(nullの場合はブラウザのみ起動)
+    url: ?[]const u8,
+) !void {
     if (@import("builtin").os.tag == .windows) {
         var argv: std.ArrayList([]const u8) = .empty;
         defer argv.deinit(allocator);
