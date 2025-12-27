@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: master
+
+      - name: Build Release
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Create Zip
+        run: |
+          mkdir release
+          copy zig-out\bin\BrowserLauncher.exe release\
+          copy config.json release\
+          Compress-Archive -Path release\* -DestinationPath BrowserLauncher.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BrowserLauncher.zip
+          generate_release_notes: true
