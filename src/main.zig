@@ -1,17 +1,28 @@
+//! ブラウザランチャー
+//!
+//! 設定ファイルまたはコマンドライン引数で指定されたブラウザを起動する。
+//! ブラウザが指定されていない場合はOSのデフォルトブラウザを使用する。
+
 const std = @import("std");
 const fs = std.fs;
 const json = std.json;
 const process = std.process;
 
+/// 設定ファイル(config.json)の構造
 const Config = struct {
+    /// デフォルトで使用するブラウザ名
     default: ?[]const u8 = null,
+    /// ブラウザ名とパスのマッピング
     browsers: json.ArrayHashMap(Browser) = .{},
 
+    /// ブラウザの設定
     const Browser = struct {
+        /// ブラウザ実行ファイルのパス
         path: []const u8,
     };
 };
 
+/// エントリーポイント
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -72,6 +83,7 @@ pub fn main() !void {
     }
 }
 
+/// ヘルプメッセージを表示する
 fn printHelp() void {
     const help =
         \\browser-launcher [options] [url]
@@ -89,11 +101,15 @@ fn printHelp() void {
     std.debug.print("{s}", .{help});
 }
 
+/// 設定ファイルの読み込み結果
 const ConfigResult = struct {
+    /// JSONソース文字列(メモリ解放用に保持)
     source: []const u8,
+    /// パース結果
     parsed: ?json.Parsed(Config),
 };
 
+/// exe横のconfig.jsonを読み込む
 fn loadConfig(allocator: std.mem.Allocator) !?ConfigResult {
     // exe横のconfig.jsonを探す
     const exe_dir = try fs.selfExeDirPathAlloc(allocator);
@@ -125,6 +141,12 @@ fn loadConfig(allocator: std.mem.Allocator) !?ConfigResult {
     };
 }
 
+/// ブラウザパスを決定する
+///
+/// 優先順位:
+/// 1. -b/--browser で指定(パスならそのまま、名前ならconfig.jsonから解決)
+/// 2. config.json の default
+/// 3. null(OSデフォルトを使用)
 fn determineBrowserPath(browser_arg: ?[]const u8, config: ?ConfigResult) ?[]const u8 {
     if (browser_arg) |arg| {
         // パス区切りまたは.exeが含まれていればパスとして扱う
@@ -160,6 +182,7 @@ fn determineBrowserPath(browser_arg: ?[]const u8, config: ?ConfigResult) ?[]cons
     return null;
 }
 
+/// 指定されたブラウザでURLを開く
 fn launchBrowser(allocator: std.mem.Allocator, browser_path: []const u8, url: ?[]const u8) !void {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
@@ -173,6 +196,9 @@ fn launchBrowser(allocator: std.mem.Allocator, browser_path: []const u8, url: ?[
     _ = try child.spawn();
 }
 
+/// OSのデフォルトブラウザでURLを開く
+///
+/// Windowsでは `cmd /c start "" URL` を使用する。
 fn launchWithSystemDefault(allocator: std.mem.Allocator, url: ?[]const u8) !void {
     if (@import("builtin").os.tag == .windows) {
         var argv: std.ArrayList([]const u8) = .empty;
