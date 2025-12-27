@@ -1,0 +1,14 @@
+{
+  "default": "chrome",
+  "browsers": {
+    "chrome": {
+      "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    },
+    "firefox": {
+      "path": "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+    },
+    "edge": {
+      "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+    }
+  }
+}
