@@ -1,35 +1,15 @@
 //! ブラウザランチャー
-//!
-//! 設定ファイルまたはコマンドライン引数で指定されたブラウザを起動する。
-//! ブラウザが指定されていない場合はOSのデフォルトブラウザを使用する。
 
 const std = @import("std");
-const fs = std.fs;
-const json = std.json;
-const process = std.process;
+const config = @import("config.zig");
 
-/// 設定ファイル(config.json)の構造
-const Config = struct {
-    /// デフォルトで使用するブラウザ名
-    default: ?[]const u8 = null,
-    /// ブラウザ名とパスのマッピング
-    browsers: json.ArrayHashMap(Browser) = .{},
-
-    /// ブラウザの設定
-    const Browser = struct {
-        /// ブラウザ実行ファイルのパス
-        path: []const u8,
-    };
-};
-
-/// エントリーポイント
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     // コマンドライン引数をパース
-    var args = try process.argsWithAllocator(allocator);
+    var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
 
     _ = args.next(); // プログラム名をスキップ
@@ -54,21 +34,18 @@ pub fn main() !void {
     const url: ?[]const u8 = url_arg;
 
     // 設定ファイルを読み込む
-    var config: ?ConfigResult = null;
-    if (loadConfig(allocator)) |c| {
-        config = c;
+    var cfg: ?config.Result = null;
+    if (config.load(allocator)) |c| {
+        cfg = c;
     } else |err| {
         if (err != error.FileNotFound) {
             std.debug.print("警告: 設定ファイルの読み込みに失敗しました\n", .{});
         }
     }
-    defer if (config) |c| {
-        if (c.parsed) |p| p.deinit();
-        allocator.free(c.source);
-    };
+    defer if (cfg) |c| c.deinit(allocator);
 
     // ブラウザパスを決定
-    const browser_path = determineBrowserPath(browser_arg, config);
+    const browser_path = determineBrowserPath(browser_arg, cfg);
 
     // ブラウザを起動
     if (browser_path) |path| {
@@ -83,7 +60,6 @@ pub fn main() !void {
     }
 }
 
-/// ヘルプメッセージを表示する
 fn printHelp() void {
     const help =
         \\browser-launcher [options] [url]
@@ -101,61 +77,8 @@ fn printHelp() void {
     std.debug.print("{s}", .{help});
 }
 
-/// 設定ファイルの読み込み結果
-const ConfigResult = struct {
-    /// JSONソース文字列(メモリ解放用に保持)
-    source: []const u8,
-    /// パース結果
-    parsed: ?json.Parsed(Config),
-};
-
-/// exe横のconfig.jsonを読み込む
-fn loadConfig(
-    /// メモリアロケータ
-    allocator: std.mem.Allocator,
-) !?ConfigResult {
-    // exe横のconfig.jsonを探す
-    const exe_dir = try fs.selfExeDirPathAlloc(allocator);
-    defer allocator.free(exe_dir);
-
-    const config_path = try fs.path.join(allocator, &.{ exe_dir, "config.json" });
-    defer allocator.free(config_path);
-
-    const file = try fs.openFileAbsolute(config_path, .{});
-    defer file.close();
-
-    // ファイルサイズを取得して読み込む
-    const stat = try file.stat();
-    const source = try allocator.alloc(u8, stat.size);
-    errdefer allocator.free(source);
-
-    const bytes_read = try file.preadAll(source, 0);
-    if (bytes_read != stat.size) {
-        return error.UnexpectedEof;
-    }
-
-    const parsed = try json.parseFromSlice(Config, allocator, source, .{
-        .allocate = .alloc_always,
-    });
-
-    return .{
-        .source = source,
-        .parsed = parsed,
-    };
-}
-
-/// ブラウザパスを決定する
-///
-/// 優先順位:
-/// 1. -b/--browser で指定(パスならそのまま、名前ならconfig.jsonから解決)
-/// 2. config.json の default
-/// 3. null(OSデフォルトを使用)
-fn determineBrowserPath(
-    /// ブラウザ名またはパス(コマンドライン引数から)
-    browser_arg: ?[]const u8,
-    /// 設定ファイルの読み込み結果
-    config: ?ConfigResult,
-) ?[]const u8 {
+/// ブラウザパスを決定
+fn determineBrowserPath(browser_arg: ?[]const u8, cfg: ?config.Result) ?[]const u8 {
     if (browser_arg) |arg| {
         // パス区切りまたは.exeが含まれていればパスとして扱う
         if (std.mem.indexOf(u8, arg, "\\") != null or
@@ -165,7 +88,7 @@ fn determineBrowserPath(
             return arg;
         }
         // config.jsonから名前で解決
-        if (config) |c| {
+        if (cfg) |c| {
             if (c.parsed) |p| {
                 if (p.value.browsers.map.get(arg)) |browser| {
                     return browser.path;
@@ -177,7 +100,7 @@ fn determineBrowserPath(
     }
 
     // config.jsonのdefaultを使用
-    if (config) |c| {
+    if (cfg) |c| {
         if (c.parsed) |p| {
             if (p.value.default) |default_name| {
                 if (p.value.browsers.map.get(default_name)) |browser| {
@@ -191,14 +114,7 @@ fn determineBrowserPath(
 }
 
 /// 指定されたブラウザでURLを開く
-fn launchBrowser(
-    /// メモリアロケータ
-    allocator: std.mem.Allocator,
-    /// ブラウザ実行ファイルのパス
-    browser_path: []const u8,
-    /// 開くURL(nullの場合はブラウザのみ起動)
-    url: ?[]const u8,
-) !void {
+fn launchBrowser(allocator: std.mem.Allocator, browser_path: []const u8, url: ?[]const u8) !void {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
 
@@ -212,14 +128,7 @@ fn launchBrowser(
 }
 
 /// OSのデフォルトブラウザでURLを開く
-///
-/// Windowsでは `cmd /c start "" URL` を使用する。
-fn launchWithSystemDefault(
-    /// メモリアロケータ
-    allocator: std.mem.Allocator,
-    /// 開くURL(nullの場合はブラウザのみ起動)
-    url: ?[]const u8,
-) !void {
+fn launchWithSystemDefault(allocator: std.mem.Allocator, url: ?[]const u8) !void {
     if (@import("builtin").os.tag == .windows) {
         var argv: std.ArrayList([]const u8) = .empty;
         defer argv.deinit(allocator);
