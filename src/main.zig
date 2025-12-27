@@ -11,11 +11,13 @@ pub fn main() !void {
     defer args.deinit();
 
     _ = args.next(); // プログラム名をスキップ
-    const url = args.next();
+    const arg = args.next() orelse return;
 
-    if (url == null) {
-        return;
-    }
+    // スキームがなければ https:// を付ける
+    const url = if (std.mem.startsWith(u8, arg, "http://") or std.mem.startsWith(u8, arg, "https://"))
+        arg
+    else
+        try std.fmt.allocPrint(allocator, "https://{s}", .{arg});
 
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
@@ -24,7 +26,7 @@ pub fn main() !void {
     try argv.append(allocator, "/c");
     try argv.append(allocator, "start");
     try argv.append(allocator, "");
-    try argv.append(allocator, url.?);
+    try argv.append(allocator, url);
 
     var child = std.process.Child.init(argv.items, allocator);
     _ = try child.spawn();
